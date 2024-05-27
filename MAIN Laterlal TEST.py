@@ -41,6 +41,7 @@ dron.arm()
 print('armado')
 dron.takeOff(3)
 dron.startGo()
+dron.fixHeading()
 
 while True:
 
