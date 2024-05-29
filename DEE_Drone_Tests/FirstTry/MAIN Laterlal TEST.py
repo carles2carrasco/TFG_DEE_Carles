@@ -16,7 +16,7 @@ w, h = 640, 480
 
 # PID controller parameters
 
-Kp = 0.2
+Kp = 0.005
 Ki = 0.0
 Kd = 0.0
 # Initialize PID variables
@@ -30,7 +30,7 @@ cap.set(4, 480)
 model_path = "yolo-Weights/yolov8n.pt"
 model = YOLO(model_path)
 
-# Initialize drone
+# Initialize drone in Guided mode
 dron = Dron()
 connection_string = 'tcp:127.0.0.1:5763'
 baud = 115200
@@ -116,5 +116,6 @@ while True:
     cv2.imshow('Dron', img)
     if cv2.waitKey(1) == ord('q'):
         break
-
+dron.stopGo()
+dron.Land()
 cv2.destroyAllWindows()
