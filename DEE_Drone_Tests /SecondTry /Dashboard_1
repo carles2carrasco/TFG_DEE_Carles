@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import Label, Frame, Button, Scale, HORIZONTAL
+from tkinter import Label, Frame, Button, Scale, HORIZONTAL, OptionMenu, StringVar
 import cv2
 from PIL import Image, ImageTk
 import paho.mqtt.client as mqtt
@@ -7,7 +7,6 @@ import threading
 import json
 import Dron
 import time
-import torch
 from ultralytics import YOLO
 
 # Inicialización del dron
@@ -31,7 +30,6 @@ velocidad_p1 = 0
 displacement = 0  # Inicialización de la variable global para el desplazamiento lateral
 MODO = 'manual'  # Modo inicial
 
-
 # Función para manejar mensajes MQTT
 def on_message(client, userdata, msg):
     message = msg.payload.decode('utf-8')
@@ -44,11 +42,9 @@ def on_message(client, userdata, msg):
     except json.JSONDecodeError:
         print("Error al decodificar el mensaje JSON")
 
-
 def update_labels(latitude, longitude):
     coords_lat_label.config(text=f"Latitude: {latitude}")
     coords_long_label.config(text=f"Longitude: {longitude}")
-
 
 # Funciones asociadas a los botones
 def despegar():
@@ -59,30 +55,24 @@ def despegar():
     dron.startGo()
     dron.fixHeading()
 
-
 def automatico():
     global MODO
     MODO = 'auto'
     print("Modo Automático Activado")
 
-
 def izquierda():
     print("Moviendo a la izquierda")
     dron.go("Left")
 
-
 def derecha():
     print("Moviendo a la derecha")
-    dron.navSpeed
     dron.go("Right")
-
 
 def cambiar_velocidad(val):
     global velocidad_p1
     velocidad_p1 = int(val)
     dron.changeNavSpeed(velocidad_p1)
     print(f"Velocidad ajustada a: {velocidad_p1}")
-
 
 # Configuración del cliente MQTT
 def setup_mqtt():
@@ -98,7 +88,6 @@ def setup_mqtt():
             time.sleep(5)  # Espera 5 segundos antes de reintentar
     client.subscribe("CarlesDEECoordenadas")
     client.loop_start()
-
 
 # Captura y muestra la imagen de la webcam, y calcula el desplazamiento lateral
 def show_frame():
@@ -159,6 +148,13 @@ def show_frame():
             print("Moviendo automáticamente a la izquierda")
             izquierda()  # Ejecutar movimiento a la izquierda
 
+# Función para cambiar la cámara
+def cambiar_camara(selection):
+    global cap
+    cap.release()  # Cerramos la cámara actual
+    cap = cv2.VideoCapture(int(selection))  # Abrimos la cámara seleccionada
+    if not cap.isOpened():
+        print(f"Error: No se pudo abrir la cámara {selection}")
 
 # Configuración de la ventana principal
 root = tk.Tk()
@@ -212,24 +208,30 @@ coords_long_label.pack(pady=2)
 
 # Widget para mostrar la imagen de la webcam
 webcam_label = Label(root)
-webcam_label.grid(row=0, column=1, padx=10, pady=10, sticky="ne")  # Posicionar en la parte superior derecha
+webcam_label.grid(row=0, column=1, rowspan=2, padx=10, pady=10)
 
-# Inicia el cliente MQTT en un hilo separado
-mqtt_thread = threading.Thread(target=setup_mqtt)
-mqtt_thread.start()
+# Lista de cámaras disponibles (ajustar según tu configuración)
+num_cameras = 2  # Número de cámaras que tienes conectadas
+camera_options = [str(i) for i in range(num_cameras)]
 
-# Inicia la captura de la webcam
+selected_camera = StringVar()
+selected_camera.set(camera_options[0])  # Valor por defecto
+
+# Mostrar el menú desplegable para seleccionar la cámara
+camera_label = Label(controls_frame, text="Seleccionar Cámara:")
+camera_label.grid(row=6, column=0, padx=5, pady=5)
+
+camera_menu = OptionMenu(controls_frame, selected_camera, *camera_options, command=cambiar_camara)
+camera_menu.grid(row=7, column=0, padx=5, pady=5)
+
+# Inicializar la primera cámara seleccionada
 cap = cv2.VideoCapture(0)
 show_frame()
 
+# Configurar y lanzar MQTT en un hilo separado
+mqtt_thread = threading.Thread(target=setup_mqtt)
+mqtt_thread.daemon = True
+mqtt_thread.start()
 
-# Función para cerrar la aplicación
-def on_closing():
-    print("Cerrando la aplicación...")
-    cap.release()
-    cv2.destroyAllWindows()
-    root.destroy()
-
-
-root.protocol("WM_DELETE_WINDOW", on_closing)
+# Iniciar el bucle principal de la interfaz
 root.mainloop()
