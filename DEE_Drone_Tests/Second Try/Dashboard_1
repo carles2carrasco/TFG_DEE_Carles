@@ -1,0 +1,237 @@
+import tkinter as tk
+from tkinter import Label, Frame, Button, Scale, HORIZONTAL, OptionMenu, StringVar
+import cv2
+from PIL import Image, ImageTk
+import paho.mqtt.client as mqtt
+import threading
+import json
+import Dron
+import time
+from ultralytics import YOLO
+
+# Inicialización del dron
+dron = Dron.Dron()
+connection_string = 'tcp:127.0.0.1:5763'
+baud = 115200
+
+try:
+    print('Voy a conectarme')
+    dron.connect(connection_string, baud, id=1)
+    print('Conectado')
+except Exception as e:
+    print(f"Error al conectar: {e}")
+
+# Modelo de detección de personas con YOLOv8
+model = YOLO('yolov8n.pt')
+
+# Variables globales
+velocidad_p = 0
+velocidad_p1 = 0
+displacement = 0  # Inicialización de la variable global para el desplazamiento lateral
+MODO = 'manual'  # Modo inicial
+
+# Función para manejar mensajes MQTT
+def on_message(client, userdata, msg):
+    message = msg.payload.decode('utf-8')
+    try:
+        coords = json.loads(message)
+        latitude = coords.get('latitude', 'N/A')
+        longitude = coords.get('longitude', 'N/A')
+
+        root.after(0, lambda: update_labels(latitude, longitude))
+    except json.JSONDecodeError:
+        print("Error al decodificar el mensaje JSON")
+
+def update_labels(latitude, longitude):
+    coords_lat_label.config(text=f"Latitude: {latitude}")
+    coords_long_label.config(text=f"Longitude: {longitude}")
+
+# Funciones asociadas a los botones
+def despegar():
+    print("Despegando...")
+    dron.arm()
+    print('armado')
+    dron.takeOff(3)
+    dron.startGo()
+    dron.fixHeading()
+
+def automatico():
+    global MODO
+    MODO = 'auto'
+    print("Modo Automático Activado")
+
+def izquierda():
+    print("Moviendo a la izquierda")
+    dron.go("Left")
+
+def derecha():
+    print("Moviendo a la derecha")
+    dron.go("Right")
+
+def cambiar_velocidad(val):
+    global velocidad_p1
+    velocidad_p1 = int(val)
+    dron.changeNavSpeed(velocidad_p1)
+    print(f"Velocidad ajustada a: {velocidad_p1}")
+
+# Configuración del cliente MQTT
+def setup_mqtt():
+    client = mqtt.Client()
+    client.on_message = on_message
+    connected = False
+    while not connected:
+        try:
+            client.connect("broker.hivemq.com", 1883, 60)
+            connected = True
+        except Exception as e:
+            print(f"Error conectando a MQTT: {e}")
+            time.sleep(5)  # Espera 5 segundos antes de reintentar
+    client.subscribe("CarlesDEECoordenadas")
+    client.loop_start()
+
+# Captura y muestra la imagen de la webcam, y calcula el desplazamiento lateral
+def show_frame():
+    global displacement, MODO  # Usar las variables globales de desplazamiento lateral y modo
+    _, frame = cap.read()
+    height, width, _ = frame.shape
+    frame_center = width // 2  # Centro horizontal del fotograma
+    half_frame_width = width / 2  # Mitad del ancho del fotograma para la normalización
+    results = model(frame)  # Hacer la detección con YOLOv8
+    annotated_frame = frame.copy()
+
+    highest_confidence = 0
+    best_person_box = None
+    displacement = 0  # Establecer el valor de desplazamiento a 0 por defecto
+
+    # Iterar sobre los resultados de detección
+    for result in results:
+        for box in result.boxes:
+            if box.cls == 0:  # '0' es la clase para personas en COCO dataset
+                confidence = box.conf[0].item()  # Obtener la confianza de la detección
+                if confidence > highest_confidence:
+                    highest_confidence = confidence
+                    best_person_box = box  # Almacenar la caja con la mayor confianza
+
+    # Si se encontró una detección de persona con alta confianza
+    if best_person_box is not None:
+        x1, y1, x2, y2 = map(int, best_person_box.xyxy[0])
+        cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(annotated_frame, f"Person: {highest_confidence:.2f}", (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+        # Calcular el centro del cuadro detectado
+        box_center = (x1 + x2) // 2
+
+        # Calcular desplazamiento lateral normalizado entre -1 y 1
+        displacement = (box_center - frame_center) / half_frame_width
+
+    # Actualizar la etiqueta con el valor de desplazamiento
+    displacement_label.config(text=f"P: {displacement:.2f}")
+
+    # Mostrar la imagen anotada en la interfaz de Tkinter
+    cv2image = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+    img = Image.fromarray(cv2image)
+    imgtk = ImageTk.PhotoImage(image=img)
+    webcam_label.imgtk = imgtk
+    webcam_label.configure(image=imgtk)
+    webcam_label.after(10, show_frame)
+
+    # Movimiento automático si estamos en modo automático
+    if MODO == 'auto':
+        velocidad = abs(displacement) * 10  # Multiplicamos por 10 para ajustar la escala de velocidad
+        cambiar_velocidad(velocidad)  # Ajustar la velocidad
+
+        if displacement > 0:
+            print("Moviendo automáticamente a la derecha")
+            derecha()  # Ejecutar movimiento a la derecha
+        elif displacement < 0:
+            print("Moviendo automáticamente a la izquierda")
+            izquierda()  # Ejecutar movimiento a la izquierda
+
+# Función para cambiar la cámara
+def cambiar_camara(selection):
+    global cap
+    cap.release()  # Cerramos la cámara actual
+    cap = cv2.VideoCapture(int(selection))  # Abrimos la cámara seleccionada
+    if not cap.isOpened():
+        print(f"Error: No se pudo abrir la cámara {selection}")
+
+# Configuración de la ventana principal
+root = tk.Tk()
+root.title("Dashboard")
+
+# Frame para los controles (botones y slider)
+controls_frame = Frame(root)
+controls_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nw")
+
+# Botón Despegar
+btn_despegar = Button(controls_frame, text="Despegar", bg="red", fg="white", command=despegar)
+btn_despegar.grid(row=0, column=0, padx=5, pady=5)
+
+# Botón Automático
+btn_automatico = Button(controls_frame, text="Automático", bg="blue", fg="white", command=automatico)
+btn_automatico.grid(row=1, column=0, padx=5, pady=5)
+
+# Botón Izquierda
+btn_izquierda = Button(controls_frame, text="Izquierda", bg="green", fg="white", command=izquierda)
+btn_izquierda.grid(row=2, column=0, padx=5, pady=5)
+
+# Botón Derecha
+btn_derecha = Button(controls_frame, text="Derecha", bg="green", fg="white", command=derecha)
+btn_derecha.grid(row=2, column=1, padx=5, pady=5)
+
+# Slider de Velocidad
+velocidad_label = Label(controls_frame, text="Velocidad")
+velocidad_label.grid(row=3, column=0, columnspan=2)
+velocidad_slider = Scale(controls_frame, from_=0, to=10, orient=HORIZONTAL, command=cambiar_velocidad)
+velocidad_slider.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
+
+# Añadir la etiqueta para mostrar el valor de desplazamiento lateral
+displacement_label = Label(controls_frame, text="P: 0.00")
+displacement_label.grid(row=5, column=0, columnspan=2, padx=5, pady=5)
+
+# Frame para el área de coordenadas con borde negro
+coords_frame = Frame(root, borderwidth=2, relief="solid", bg="white")
+coords_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nw")
+
+# Etiqueta para el texto "Coordenadas:"
+coords_label = Label(coords_frame, text="Coordenadas Usuario:", font=("Helvetica", 16), bg="white")
+coords_label.pack(pady=5)
+
+# Etiqueta para la latitud
+coords_lat_label = Label(coords_frame, text="Latitude: N/A", font=("Helvetica", 14), bg="white")
+coords_lat_label.pack(pady=2)
+
+# Etiqueta para la longitud
+coords_long_label = Label(coords_frame, text="Longitude: N/A", font=("Helvetica", 14), bg="white")
+coords_long_label.pack(pady=2)
+
+# Widget para mostrar la imagen de la webcam
+webcam_label = Label(root)
+webcam_label.grid(row=0, column=1, rowspan=2, padx=10, pady=10)
+
+# Lista de cámaras disponibles (ajustar según tu configuración)
+num_cameras = 2  # Número de cámaras que tienes conectadas
+camera_options = [str(i) for i in range(num_cameras)]
+
+selected_camera = StringVar()
+selected_camera.set(camera_options[0])  # Valor por defecto
+
+# Mostrar el menú desplegable para seleccionar la cámara
+camera_label = Label(controls_frame, text="Seleccionar Cámara:")
+camera_label.grid(row=6, column=0, padx=5, pady=5)
+
+camera_menu = OptionMenu(controls_frame, selected_camera, *camera_options, command=cambiar_camara)
+camera_menu.grid(row=7, column=0, padx=5, pady=5)
+
+# Inicializar la primera cámara seleccionada
+cap = cv2.VideoCapture(0)
+show_frame()
+
+# Configurar y lanzar MQTT en un hilo separado
+mqtt_thread = threading.Thread(target=setup_mqtt)
+mqtt_thread.daemon = True
+mqtt_thread.start()
+
+# Iniciar el bucle principal de la interfaz
+root.mainloop()
