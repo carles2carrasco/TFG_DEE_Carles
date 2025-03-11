@@ -2,6 +2,7 @@
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/466be3b5-3148-43c9-8152-30bc2cabf20a" alt="Dron">
+  <img src="https://github.com/user-attachments/assets/b1e0ecdc-a844-4b25-a318-dd350971b96b" alt="Dron">
 </p>
   
 *Desarrollo de un dron de seguimiento híbrido para el Drone Engineering Ecosystem (DEE)*
