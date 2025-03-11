@@ -1,6 +1,7 @@
 # 📌 Dron de Seguimiento Híbrido - TFG
 
-![Drone](https://upload.wikimedia.org/wikipedia/commons/3/3d/Quadcopter.jpg)  
+![image](https://github.com/user-attachments/assets/466be3b5-3148-43c9-8152-30bc2cabf20a)
+  
 *Desarrollo de un dron de seguimiento híbrido para el Drone Engineering Ecosystem (DEE)*
 
 ## 📝 Descripción
