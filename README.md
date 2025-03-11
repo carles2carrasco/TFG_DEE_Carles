@@ -1,6 +1,8 @@
 # 📌 Dron de Seguimiento Híbrido - TFG
 
-![image](https://github.com/user-attachments/assets/466be3b5-3148-43c9-8152-30bc2cabf20a)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/466be3b5-3148-43c9-8152-30bc2cabf20a" alt="Dron">
+</p>
   
 *Desarrollo de un dron de seguimiento híbrido para el Drone Engineering Ecosystem (DEE)*
 
