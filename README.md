@@ -18,7 +18,7 @@ Este repositorio contiene el código de control del dron del Trabajo de Fin de G
 - 🛠 **Simulación en Mission Planner antes de pruebas reales en el Drone Lab**.
 
 ## 🛠 Tecnologías Utilizadas
-- **Lenguajes:** Python,
+- **Lenguajes:** Python, Vue, JavaScript
 - **Protocolos:** MAVLink, MQTT
 - **Hardware:** Cuadricóptero, sistema FPV
 
